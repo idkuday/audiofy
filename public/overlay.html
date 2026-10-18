@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>audiofy</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232b5fc4' stroke-width='2.5' stroke-linecap='round'%3E%3Crect x='9' y='2' width='6' height='12' rx='3'/%3E%3Cpath d='M5 10a7 7 0 0 0 14 0M12 17v4'/%3E%3C/svg%3E">
+<style id="widget-style">
+  :root {
+    --bg: #f6f6f4; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e3e3de;
+    --idle: #3a3a36; --listen: #1f7a4d; --rec: #c4312b; --busy: #8a6d1f; --speak: #2b5fc4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #151514; --panel: #1f1f1d; --text: #ecece8; --muted: #9a9a93; --line: #33332f;
+      --idle: #d6d6d0; --listen: #4cc38a; --rec: #ff6b61; --busy: #e0b84a; --speak: #7aa2ff; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .widget { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    padding: 16px; height: 100%; min-height: 240px; text-align: center; }
+  .mic { --c: var(--idle); width: 96px; height: 96px; border-radius: 50%; border: 3px solid var(--c);
+    background: var(--panel); color: var(--c); cursor: pointer; display: grid; place-items: center;
+    transition: border-color .15s, color .15s, transform .1s, box-shadow .08s; position: relative;
+    box-shadow: 0 0 0 var(--lvl, 0px) color-mix(in srgb, var(--c) 28%, transparent); }
+  .mic:active { transform: scale(.96); }
+  .mic:focus-visible { outline: 3px solid var(--speak); outline-offset: 3px; }
+  .mic svg { width: 40px; height: 40px; }
+  .mic::after { content: ""; position: absolute; inset: -9px; border-radius: 50%; border: 2px solid var(--c); opacity: 0; }
+  .mic[data-state="listening"], .mic[data-state="armed"] { --c: var(--listen); }
+  .mic[data-state="listening"]::after { animation: pulse 1.6s ease-out infinite; }
+  .mic[data-state="recording"] { --c: var(--rec); }
+  .mic[data-state="recording"]::after { animation: pulse .9s ease-out infinite; }
+  .mic[data-state="transcribing"] { --c: var(--busy); }
+  .mic[data-state="speaking"] { --c: var(--speak); }
+  .mic[data-state="offline"] { --c: var(--muted); cursor: default; }
+  @keyframes pulse { from { opacity: .8; transform: scale(.92); } to { opacity: 0; transform: scale(1.2); } }
+  @media (prefers-reduced-motion: reduce) { .mic::after { animation: none !important; opacity: .6; } }
+  .status { font-weight: 600; }
+  .line { color: var(--muted); font-size: 12px; max-width: 280px; display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden; min-height: 2.8em; }
+  .toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); cursor: pointer; user-select: none; }
+  .toggle input { appearance: none; width: 30px; height: 18px; border-radius: 9px; background: var(--line); position: relative;
+    margin: 0; cursor: pointer; transition: background .15s; }
+  .toggle input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--panel); transition: transform .15s; }
+  .toggle input:checked { background: var(--listen); }
+  .toggle input:checked::after { transform: translateX(12px); }
+  .toggle input:focus-visible { outline: 2px solid var(--speak); outline-offset: 2px; }
+</style>
+<style>
+  .page { max-width: 560px; margin: 0 auto; padding: 32px 16px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+  .actions { display: flex; gap: 8px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+  button.secondary { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); cursor: pointer; }
+  button.secondary:disabled { opacity: .5; cursor: default; }
+  .hints { color: var(--muted); font-size: 13px; margin-top: 24px; padding-left: 18px; }
+  .hints li { margin: 4px 0; }
+  code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; background: var(--line);
+    padding: 1px 5px; border-radius: 4px; }
+  .note { color: var(--muted); font-size: 12px; text-align: center; margin-top: 8px; min-height: 1.4em; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>audiofy</h1>
+  <p class="sub">Talk to your coding agent from any app.</p>
+  <div class="card" id="home">
+    <div class="widget" id="widget">
+      <button class="mic" id="mic" data-state="offline" aria-label="Push to talk">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><path d="M12 17v4"/>
+        </svg>
+      </button>
+      <div class="status" id="status">Connecting…</div>
+      <div class="line" id="line"></div>
+      <label class="toggle"><input type="checkbox" id="handsfree"> Hands-free</label>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="secondary" id="popout">Pop out (always on top)</button>
+  </div>
+  <div class="note" id="note"></div>
+  <ul class="hints">
+    <li>Click the button (or press <code>Space</code>) to start talking, click again to send.</li>
+    <li><strong>Hands-free:</strong> just talk, any time. A pause of about 2.5 seconds sends it. If the agent is busy, it gets your message as soon as it next listens. The mic closes while the agent speaks so it never hears itself.</li>
+    <li>Green pulse: the agent is waiting for you. Click while it's speaking to skip.</li>
+    <li>Pop out keeps the button floating above other windows (Chrome / Edge / Brave).</li>
+    <li>Global shortcut: bind your OS keyboard shortcut to <code>audiofy ptt</code>.</li>
+  </ul>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const mic = $('mic'), statusEl = $('status'), lineEl = $('line'), note = $('note'), handsfreeBox = $('handsfree');
+let server = { listening: false, relisten: false, speaking: false, lastMessage: '', lastTranscript: '', queued: false };
+let local = 'idle'; // idle | armed | recording | transcribing
+let connected = false;
+let current = null; // { id, audio } being played
+let ctx = null, session = null, pipWindow = null, arming = false;
+
+// Hands-free tuning (20 ms frames).
+const FRAME_SEC = 0.02;
+const CALIBRATE_FRAMES = 15; // 300 ms to learn the room's noise floor
+const START_FRAMES = 4; // 80 ms above threshold starts an utterance
+const END_SILENCE_SEC = 2.5; // this much quiet ends it (room for thinking pauses)
+const PREROLL_SEC = 0.5; // audio kept from before speech was detected
+const MIN_SPEECH_SEC = 0.35;
+const MAX_UTTERANCE_SEC = 120;
+
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+let handsFree = store.get('audiofy.handsfree') === '1';
+handsfreeBox.checked = handsFree;
+
+const LABELS = {
+  offline: 'Server offline', idle: 'Click to talk', listening: 'Agent is listening',
+  armed: 'Hands-free — talk anytime', transcribing: 'Transcribing…', speaking: 'Speaking — click to skip',
+};
+
+function render() {
+  const state = !connected ? 'offline'
+    : local !== 'idle' ? local
+    : current ? 'speaking'
+    : server.listening ? 'listening' : 'idle';
+  mic.dataset.state = state;
+  statusEl.textContent =
+    state === 'recording' ? (session?.mode === 'auto' ? 'Hearing you…' : 'Recording — click to send')
+    : state === 'armed' && server.listening ? 'Listening — just talk'
+    : server.queued && (state === 'idle' || state === 'armed') ? 'Sent — agent will get it next'
+    : LABELS[state];
+  lineEl.textContent = state === 'speaking' || state === 'listening' || state === 'armed' ? server.lastMessage
+    : server.lastTranscript ? `You: ${server.lastTranscript}` : server.lastMessage;
+  lineEl.title = lineEl.textContent;
+  if (state !== 'armed' && state !== 'recording') mic.style.setProperty('--lvl', '0px');
+}
+
+function audioCtx() {
+  ctx ??= new AudioContext();
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+  return ctx;
+}
+
+function chime(freqs) {
+  if (!ctx || ctx.state !== 'running') return;
+  let t = ctx.currentTime;
+  for (const f of freqs) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.15, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    o.connect(g).connect(ctx.destination);
+    o.start(t); o.stop(t + 0.13);
+    t += 0.1;
+  }
+}
+
+const WORKLET = `registerProcessor('rec', class extends AudioWorkletProcessor {
+  process(inputs) { const ch = inputs[0][0]; if (ch) this.port.postMessage(ch.slice()); return true; }
+});`;
+
+// Opens the mic. mode 'manual' records everything; 'auto' waits for speech.
+async function openMic(mode) {
+  const c = audioCtx();
+  if (!c.audioWorklet._audiofy) {
+    await c.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' })));
+    c.audioWorklet._audiofy = true;
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+  });
+  const source = c.createMediaStreamSource(stream);
+  const node = new AudioWorkletNode(c, 'rec');
+  const sink = c.createGain(); sink.gain.value = 0;
+  const frameLen = Math.round(c.sampleRate * FRAME_SEC);
+  const s = {
+    mode, stream, source, node, sink, rate: c.sampleRate, chunks: [], preroll: [], prerollLen: 0,
+    started: Date.now(), speaking: false,
+    vad: { frame: new Float32Array(frameLen), fill: 0, frames: 0, floor: 0, run: 0, quiet: 0, voiced: 0 },
+  };
+  node.port.onmessage = (e) => onChunk(s, e.data);
+  source.connect(node).connect(sink).connect(c.destination);
+  return s;
+}
+
+function closeMic(s) {
+  s.source.disconnect(); s.node.disconnect(); s.sink.disconnect();
+  s.stream.getTracks().forEach((t) => t.stop()); // mic indicator off between turns
+}
+
+function onChunk(s, ch) {
+  if (s !== session) return;
+  if (s.mode === 'manual' || s.speaking) s.chunks.push(ch);
+  if (s.mode !== 'auto') return;
+  if (!s.speaking) {
+    s.preroll.push(ch); s.prerollLen += ch.length;
+    while (s.prerollLen - s.preroll[0].length > PREROLL_SEC * s.rate) s.prerollLen -= s.preroll.shift().length;
+  }
+  const v = s.vad;
+  for (let i = 0; i < ch.length; i++) {
+    v.frame[v.fill++] = ch[i];
+    if (v.fill === v.frame.length) { v.fill = 0; onFrame(s, v); }
+  }
+}
+
+// Rough energy detector with an adaptive noise floor. It only decides when to
+// cut; the server's Silero VAD decides whether the clip really held speech.
+function onFrame(s, v) {
+  let sum = 0;
+  for (let i = 0; i < v.frame.length; i++) sum += v.frame[i] * v.frame[i];
+  const rms = Math.sqrt(sum / v.frame.length);
+  mic.style.setProperty('--lvl', `${Math.min(14, rms * 260).toFixed(1)}px`);
+  v.frames++;
+  if (v.frames <= CALIBRATE_FRAMES) {
+    v.floor += rms / CALIBRATE_FRAMES;
+    // If calibration caught the user mid-sentence, don't treat speech as the floor.
+    if (v.frames === CALIBRATE_FRAMES) v.floor = Math.min(v.floor, 0.01);
+    return;
+  }
+  const startThr = Math.max(0.012, v.floor * 3);
+  const endThr = Math.max(0.008, v.floor * 2);
+  if (!s.speaking) {
+    if (rms > startThr) v.run++;
+    else { v.run = 0; v.floor = 0.95 * v.floor + 0.05 * rms; }
+    if (v.run >= START_FRAMES) {
+      s.speaking = true; s.speechStart = Date.now();
+      s.chunks = s.preroll.slice();
+      v.quiet = 0; v.voiced = v.run;
+      local = 'recording'; chime([660]); render();
+    }
+    return;
+  }
+  if (rms < endThr) v.quiet++; else { v.quiet = 0; v.voiced++; }
+  const quietSec = v.quiet * FRAME_SEC;
+  if (quietSec >= END_SILENCE_SEC || Date.now() - s.speechStart > MAX_UTTERANCE_SEC * 1000) finish();
+}
+
+async function startManual() {
+  if (session?.mode === 'auto') {
+    // Already listening hands-free: switch to a manual take, keeping the pre-roll.
+    session.mode = 'manual'; session.speaking = true; session.chunks = session.preroll.slice();
+  } else {
+    session = await openMic('manual');
+  }
+  local = 'recording'; chime([660]); render();
+}
+
+async function arm() {
+  if (arming || session) return;
+  arming = true;
+  try {
+    await new Promise((r) => setTimeout(r, 350)); // let chimes and speech echo die out
+    if (!shouldArm()) return;
+    session = await openMic('auto');
+    local = 'armed'; render();
+  } catch (e) {
+    session = null; local = 'idle';
+    note.textContent = e.name === 'NotAllowedError' ? 'Microphone permission denied.' : `Mic error: ${e.message}`;
+    render();
+  } finally {
+    arming = false;
+  }
+}
+
+function disarm() {
+  if (!session) return;
+  closeMic(session); session = null; local = 'idle'; render();
+}
+
+// Hands-free keeps the mic open the whole time, except while the agent is
+// speaking (so it never transcribes itself). Speech heard while the agent is
+// busy is queued on the server for its next listen.
+const canListen = () => handsFree && connected && !current;
+const shouldArm = () => canListen() && local === 'idle' && !session;
+
+function reconcile() {
+  if (local === 'armed' && !canListen()) disarm();
+  else if (shouldArm()) arm();
+}
+
+function encodeWav(chunks, rate) {
+  const n = chunks.reduce((s, c) => s + c.length, 0);
+  const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const w = (o, s) => [...s].forEach((ch, i) => v.setUint8(o + i, ch.charCodeAt(0)));
+  w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  w(36, 'data'); v.setUint32(40, n * 2, true);
+  let o = 44;
+  for (const c of chunks) for (let i = 0; i < c.length; i++, o += 2) {
+    const s = Math.max(-1, Math.min(1, c[i]));
+    v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
+async function finish() {
+  const s = session; session = null;
+  closeMic(s);
+  const auto = s.mode === 'auto';
+  const seconds = s.chunks.reduce((n, c) => n + c.length, 0) / s.rate;
+  chime([520]);
+  const tooShort = auto ? s.vad.voiced * FRAME_SEC < MIN_SPEECH_SEC : seconds < 0.3;
+  if (tooShort) { local = 'idle'; render(); reconcile(); return; }
+  local = 'transcribing'; render();
+  try {
+    const res = await fetch(`/api/recording${auto ? '?handsfree=1' : ''}`, { method: 'POST', body: encodeWav(s.chunks, s.rate) });
+    const out = await res.json();
+    if (!res.ok) throw new Error(out.error);
+    note.textContent = out.text ? '' : auto ? '' : 'Heard nothing — try again.';
+  } catch (e) {
+    note.textContent = `Transcription failed: ${e.message}`;
+  }
+  local = 'idle'; render(); reconcile();
+}
+
+function skipSpeech() {
+  if (!current) return;
+  current.audio.pause();
+  report(current.id, { skipped: true });
+}
+
+function report(id, result) {
+  if (current?.id === id) current = null;
+  fetch(`/api/played/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(result) });
+  render(); reconcile();
+}
+
+async function toggle() {
+  if (!connected || local === 'transcribing') return;
+  try {
+    if (local === 'recording') return await finish();
+    if (current) return skipSpeech();
+    await startManual();
+  } catch (e) {
+    if (session) { closeMic(session); session = null; }
+    local = 'idle'; render();
+    note.textContent = e.name === 'NotAllowedError' ? 'Microphone permission denied.' : `Mic error: ${e.message}`;
+  }
+}
+
+function play(id) {
+  if (local === 'armed') disarm(); // never record our own voice
+  const audio = new Audio(`/api/audio/${id}`);
+  current = { id, audio };
+  audio.onended = () => report(id, { ok: true });
+  audio.onerror = () => report(id, { ok: false, error: 'audio element error' });
+  audio.play().then(render).catch((e) => report(id, { ok: false, error: e.message }));
+  render();
+}
+
+mic.addEventListener('click', toggle);
+handsfreeBox.addEventListener('change', () => {
+  handsFree = handsfreeBox.checked;
+  store.set('audiofy.handsfree', handsFree ? '1' : '0');
+  audioCtx();
+  reconcile(); render();
+});
+function onKey(e) {
+  if (e.code === 'Space' && !e.repeat && e.target === e.currentTarget.document?.body) { e.preventDefault(); toggle(); }
+}
+window.addEventListener('keydown', onKey);
+// Any interaction unlocks audio (autoplay policy), so later chimes and speech can play.
+window.addEventListener('pointerdown', audioCtx, { once: true });
+
+function connect() {
+  const es = new EventSource('/events');
+  es.onopen = () => { connected = true; render(); reconcile(); };
+  es.onerror = () => { connected = false; render(); reconcile(); };
+  es.onmessage = (e) => {
+    const ev = JSON.parse(e.data);
+    if (ev.type === 'state') {
+      if (ev.listening && !server.listening && !ev.relisten && local === 'idle') chime([523, 784]);
+      server = ev;
+    } else if (ev.type === 'play') play(ev.id);
+    else if (ev.type === 'toggle') toggle();
+    render(); reconcile();
+  };
+}
+
+// Document Picture-in-Picture: a small always-on-top window holding the widget.
+const popout = $('popout');
+if (!('documentPictureInPicture' in window)) {
+  popout.disabled = true;
+  popout.textContent = 'Pop out needs a Chromium browser';
+}
+popout.addEventListener('click', async () => {
+  audioCtx();
+  if (pipWindow) return pipWindow.close();
+  pipWindow = await documentPictureInPicture.requestWindow({ width: 240, height: 260 });
+  const style = pipWindow.document.createElement('style');
+  style.textContent = $('widget-style').textContent;
+  pipWindow.document.head.append(style);
+  pipWindow.document.title = 'audiofy';
+  pipWindow.document.body.append($('widget'));
+  pipWindow.addEventListener('keydown', onKey);
+  popout.textContent = 'Return to tab';
+  pipWindow.addEventListener('pagehide', () => {
+    $('home').append($('widget'));
+    pipWindow = null;
+    popout.textContent = 'Pop out (always on top)';
+  });
+});
+
+connect();
+render();
+</script>
+</body>
+</html>

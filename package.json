@@ -1,0 +1,40 @@
+{
+  "name": "audiofy",
+  "version": "0.1.0",
+  "description": "Local speech-to-text and text-to-speech for you and your coding agent: voice mode with a floating push-to-talk button.",
+  "type": "module",
+  "bin": {
+    "audiofy": "src/cli.js"
+  },
+  "files": [
+    "src",
+    "public",
+    "skill",
+    "install.sh"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "start": "node src/cli.js serve"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/idkuday/audiofy.git"
+  },
+  "homepage": "https://github.com/idkuday/audiofy#readme",
+  "bugs": "https://github.com/idkuday/audiofy/issues",
+  "keywords": [
+    "speech-to-text",
+    "text-to-speech",
+    "voice",
+    "claude-code",
+    "codex",
+    "agent",
+    "skill"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "sherpa-onnx-node": "^1.13.8"
+  }
+}
