@@ -24,7 +24,7 @@ agent ──shell──► audiofy CLI ──HTTP──► local server (127.0.0
 
 ## Install
 
-Requires Node 18.17+ and git. On Linux, `bzip2` is also needed to unpack the models.
+The installer sets up everything it needs: git and bzip2 through your package manager (it may ask for your sudo password), and Node.js in `~/.audiofy/node` if you don't have 18.17+.
 
 **Linux / macOS, one line:**
 
