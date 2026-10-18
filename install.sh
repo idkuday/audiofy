@@ -87,7 +87,7 @@ case ":$ORIG_PATH:" in
 esac
 cat <<EOF
 Next steps:
-  1. Open the overlay in Chrome, Edge or Brave:  http://127.0.0.1:7777
+  1. Open the overlay in Chrome, Edge or Brave:  http://127.0.0.1:${AUDIOFY_PORT:-7777}
      Click the button once to allow the microphone, then "Pop out" to float it.
   2. Restart your coding agent so it picks up the new skill.
   3. Tell the agent: "voice mode".
