@@ -38,7 +38,7 @@ as_root() {
 
 install_packages() {
   say "Installing $* (you may be asked for your password)"
-  if has apt-get; then as_root apt-get update -qq && as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$@"
+  if has apt-get; then as_root apt-get update -qq && as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$@" >/dev/null
   elif has dnf; then as_root dnf install -y -q "$@"
   elif has yum; then as_root yum install -y -q "$@"
   elif has pacman; then as_root pacman -S --needed --noconfirm "$@"
@@ -100,7 +100,7 @@ else
 fi
 
 say "Installing dependencies"
-(cd "$APP_DIR" && npm install --omit=dev --no-audit --no-fund --loglevel=error)
+(cd "$APP_DIR" && npm install --omit=dev --no-audit --no-fund --no-update-notifier --loglevel=error)
 
 # --- the `audiofy` command ---------------------------------------------------
 # A wrapper pinned to this Node, so it works even where Node isn't on PATH
